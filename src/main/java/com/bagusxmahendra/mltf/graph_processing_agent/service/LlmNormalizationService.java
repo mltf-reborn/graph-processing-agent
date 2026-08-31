@@ -50,23 +50,34 @@ public class LlmNormalizationService {
 
             // 2. Construct the semantic parsing prompt
             String prompt = """
-                You are an expert financial document data extraction AI and semantic parser.
-                Analyze the following dynamic OCR and document payload extracted from a loan application.
+                You are an expert financial document data extraction AI and semantic parser specializing in loan underwriting and income verification.
+                Analyze the dynamic OCR and document payload extracted from a loan application (which may include BANK_STATEMENT and/or PAYSLIP documents).
                 
-                Your task is to standardize the unstructured, dynamic document data into a strictly valid JSON object conforming to this schema:
+                Your task is to standardize the unstructured document data into a strictly valid JSON object conforming to this target schema:
                 {
-                  "applicationName": "Full name of the employee or account holder appearing on the documents (e.g. employee on payslip or account holder on bank statement)",
-                  "payslipEmployer": "Official employer or organization name extracted from the payslip/salary certificate",
-                  "payslipNetSalary": 5000.00, // numeric float/double representing the take-home or net monthly pay
-                  "bankStatementSalarySender": "Entity or organization name sending recurring payroll deposits in bank statements",
-                  "bankStatementMonthlyDeposit": 5000.00 // numeric float/double of the recurring payroll deposit
+                  "applicationName": "Full name of the employee or account holder appearing on the documents (e.g., employeeName on payslip or accountHolder on bank statement)",
+                  "payslipEmployer": "Official employer or organization name extracted from the payslip/salary certificate, or null if absent",
+                  "payslipNetSalary": 5000.00, // numeric float/double representing net monthly pay (take-home salary after deductions), or null if absent
+                  "bankStatementSalarySender": "Clean organization or company name identified as the recurring payroll/salary depositor from bank transactions, or null if absent",
+                  "bankStatementMonthlyDeposit": 5000.00 // numeric float/double of the recurring payroll/salary deposit amount (positive credit inflow), or null if absent
                 }
                 
-                Rules for Standardization:
-                1. Return ONLY the raw JSON object without markdown formatting, code fences, or additional text.
-                2. Extract and standardize the fields using semantic understanding of the dynamic document OCR (e.g. identify take-home pay, parse currencies into numeric doubles such as "$4,500.50" -> 4500.50).
-                3. Extract "applicationName" faithfully from the attached documents (employee/account holder name).
-                4. Ensure all JSON field names match EXACTLY.
+                Extraction & Standardization Rules:
+                1. Account Holder / Applicant Name:
+                   - Extract full name from fields like 'employeeName', 'employeeSignatureName', or 'accountHolder'.
+                2. Payslip Data Extraction:
+                   - Employer Name: Extract the official company/employer name from 'companyName', 'employerName', or header details.
+                   - Net Salary: Extract the net monthly take-home salary from 'netSalary' (or 'grossSalary' minus 'totalDeductions'). Avoid gross income or annual income.
+                   - Clean currency symbols (e.g., 'RM 14,147.65', '$5,000.00') into a clean numeric double (14147.65).
+                3. Bank Statement Transaction Extraction:
+                   - Parse delimited transaction strings (e.g., 'DATE#DESCRIPTION#AMOUNT' like '27 FEB 2026#SALARY - HOLYCOW SDN BHD#+14,147.65').
+                   - Filter positive credit inflows (marked with '+' or positive values). Exclude debit/expense transactions (marked with '-').
+                   - Identify payroll transactions via keywords (SALARY, PAYROLL, GAJI, REMUNERATION, DIRECT DEP, etc.).
+                   - Isolate clean company name by removing transaction codes (e.g., from 'SALARY - HOLYCOW SDN BHD', extract 'HOLYCOW SDN BHD').
+                   - Convert currency strings into clean numeric float/double values.
+                4. Formatting Constraints:
+                   - Return ONLY raw JSON without markdown code fences, backticks, or conversational text.
+                   - Ensure all JSON field names match the schema EXACTLY.
                 
                 Input Document Payload:
                 %s
