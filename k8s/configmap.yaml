@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: graph-processing-agent-config
+  labels:
+    app: graph-processing-agent
+data:
+  GCP_PROJECT_ID: "mltf-506212"
+  GCP_SPANNER_INSTANCE_ID: "mltf-spanner"
+  SPANNER_INSTANCE_ID: "mltf-spanner"
+  GCP_SPANNER_DATABASE_ID: "mortgage_graph_db"
+  SPANNER_DATABASE: "mortgage_graph_db"
+  GEMINI_MODEL: "gemini-3.5-flash-lite"
+  GEMINI_API_KEY: "AQ.Ab8RN6IsMbuOo8EE98G3DiPNSWfMtNsHGfpGrGPfPQdFz7-CwQ"

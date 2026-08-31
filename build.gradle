@@ -33,3 +33,74 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
+tasks.named('jar') {
+	enabled = false
+}
+
+abstract class MinikubeDeployTask extends DefaultTask {
+	@javax.inject.Inject
+	abstract org.gradle.process.ExecOperations getExecOperations()
+
+	@TaskAction
+	def deploy() {
+		def version = project.version.toString()
+
+		println ">>> [1/3] Building Docker image directly in Minikube's Docker daemon..."
+		execOperations.exec {
+			commandLine 'sh', '-c', "eval \"\$(minikube docker-env)\" && docker build --build-arg VERSION=${version} -t graph-processing-agent:${version} -t graph-processing-agent:latest ."
+		}
+
+		println ">>> [2/3] Applying Kubernetes manifests from k8s/..."
+		execOperations.exec {
+			commandLine 'kubectl', 'apply', '-k', 'k8s', '--server-side', '--force-conflicts'
+		}
+
+		println ">>> [3/3] Waiting for graph-processing-agent deployment rollout..."
+		execOperations.exec {
+			commandLine 'kubectl', 'rollout', 'status', 'deployment/graph-processing-agent', '--timeout=180s'
+		}
+
+		println "\n========================================================"
+		println " Graph Processing Agent successfully deployed to Minikube!"
+		println "========================================================"
+		println "Service status:"
+		execOperations.exec {
+			commandLine 'kubectl', 'get', 'svc', 'graph-processing-agent'
+		}
+		println "\nMinikube Service URL:"
+		try {
+			execOperations.exec {
+				commandLine 'minikube', 'service', 'graph-processing-agent', '--url'
+			}
+		} catch (Exception ignored) {
+			println "Run: minikube service graph-processing-agent --url"
+		}
+	}
+}
+
+abstract class MinikubeUndeployTask extends DefaultTask {
+	@javax.inject.Inject
+	abstract org.gradle.process.ExecOperations getExecOperations()
+
+	@TaskAction
+	def undeploy() {
+		println ">>> Deleting Kubernetes resources from Minikube..."
+		execOperations.exec {
+			commandLine 'kubectl', 'delete', '-k', 'k8s', '--ignore-not-found=true'
+		}
+		println ">>> graph-processing-agent resources undeployed successfully."
+	}
+}
+
+tasks.register('minikubeDeploy', MinikubeDeployTask) {
+	group = 'deployment'
+	description = 'Builds the Docker image in Minikube, applies k8s manifests, and waits for rollout.'
+	dependsOn 'bootJar'
+}
+
+tasks.register('minikubeUndeploy', MinikubeUndeployTask) {
+	group = 'deployment'
+	description = 'Deletes all graph-processing-agent Kubernetes resources from Minikube.'
+}
+
